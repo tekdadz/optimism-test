@@ -104,6 +104,10 @@ func (c *Config) Check() error {
 }
 
 func (c *Config) FetchingEnabled() bool {
+	log.Info("======================Fetching Enabled=============================")
+	log.Info("L1URL: ", c.L1URL)
+	log.Info("L2URL: ", c.L2URL)
+	log.Info("======================Fetching Enabled=============================")
 	// TODO: Include Beacon URL once cancun is active on all chains we fault prove.
 	return c.L1URL != "" && c.L2URL != ""
 }
@@ -198,7 +202,7 @@ func NewConfigFromCLI(log log.Logger, ctx *cli.Context) (*Config, error) {
 		L1TrustRPC:          ctx.Bool(flags.L1TrustRPC.Name),
 		L1RPCKind:           sources.RPCProviderKind(ctx.String(flags.L1RPCProviderKind.Name)),
 		ExecCmd:             ctx.String(flags.Exec.Name),
-		ServerMode:          ctx.Bool(flags.Server.Name),
+		ServerMode:          ctx.Bool(flags.Server.Name), //to fix
 		IsCustomChainConfig: isCustomConfig,
 	}, nil
 }

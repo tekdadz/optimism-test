@@ -79,6 +79,7 @@ func (s *channel) TxConfirmed(id txID, inclusionBlock eth.BlockID) (bool, []*typ
 		// We need to keep track of stale transactions instead
 		return false, nil
 	}
+	s.log.Info("================TxConfirmed in Channel.goPending Transactions===============", s.pendingTransactions)
 	delete(s.pendingTransactions, id)
 	s.confirmedTransactions[id] = inclusionBlock
 	s.confirmedTxUpdated = true

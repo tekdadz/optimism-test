@@ -149,6 +149,7 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 // If there is a reorg, it will reset the last stored block but not clear the internal state so
 // the state can be flushed to L1.
 func (l *BatchSubmitter) loadBlocksIntoState(ctx context.Context) error {
+	l.Log.Info("=================loadBlockIntoState============================")
 	start, end, err := l.calculateL2BlockRangeToStore(ctx)
 	if err != nil {
 		l.Log.Warn("Error calculating L2 block range", "err", err)

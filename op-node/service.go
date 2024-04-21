@@ -116,7 +116,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	if err := cfg.LoadPersisted(log); err != nil {
 		return nil, fmt.Errorf("failed to load driver config: %w", err)
 	}
-
+	log.Info("===================Step1: Config========================", cfg.ConductorEnabled, cfg)
 	// conductor controls the sequencer state
 	if cfg.ConductorEnabled {
 		cfg.Driver.SequencerStopped = true

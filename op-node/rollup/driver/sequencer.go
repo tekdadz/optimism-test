@@ -91,13 +91,15 @@ func (d *Sequencer) StartBuildingBlock(ctx context.Context) error {
 	// empty blocks (other than the L1 info deposit and any user deposits). We handle this by
 	// setting NoTxPool to true, which will cause the Sequencer to not include any transactions
 	// from the transaction pool.
-	attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+d.rollupCfg.MaxSequencerDrift
+	// attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+d.rollupCfg.MaxSequencerDrift
 
-	// For the Ecotone activation block we shouldn't include any sequencer transactions.
-	if d.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {
-		attrs.NoTxPool = false // fixed mine
-		d.log.Info("Sequencing Ecotone upgrade block")
-	}
+	// // For the Ecotone activation block we shouldn't include any sequencer transactions.
+	// if d.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {
+	// 	attrs.NoTxPool = false //fixed mine
+	// 	d.log.Info("Sequencing Ecotone upgrade block")
+	// }
+
+	attrs.NoTxPool = false //fixed
 
 	d.log.Debug("prepared attributes for new block",
 		"num", l2Head.Number+1, "time", uint64(attrs.Timestamp),
@@ -208,6 +210,7 @@ func (d *Sequencer) BuildingOnto() eth.L2BlockRef {
 func (d *Sequencer) RunNextSequencerAction(ctx context.Context, agossip async.AsyncGossiper, sequencerConductor conductor.SequencerConductor) (*eth.ExecutionPayloadEnvelope, error) {
 	// if the engine returns a non-empty payload, OR if the async gossiper already has a payload, we can CompleteBuildingBlock
 	if onto, buildingID, safe := d.engine.BuildingPayload(); buildingID != (eth.PayloadID{}) || agossip.Get() != nil {
+		d.log.Info("==============================RunNextSequencerAction, first if========================")
 		if safe {
 			d.log.Warn("avoiding sequencing to not interrupt safe-head changes", "onto", onto, "onto_time", onto.Time)
 			// approximates the worst-case time it takes to build a block, to reattempt sequencing after.
@@ -241,6 +244,7 @@ func (d *Sequencer) RunNextSequencerAction(ctx context.Context, agossip async.As
 			return envelope, nil
 		}
 	} else {
+		d.log.Info("==============================RunNextSequencerAction, else,   STARTBUILDINGBLOCK========================")
 		err := d.StartBuildingBlock(ctx)
 		if err != nil {
 			if errors.Is(err, derive.ErrCritical) {
