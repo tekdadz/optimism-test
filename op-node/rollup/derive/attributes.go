@@ -136,7 +136,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		PrevRandao:            eth.Bytes32(l1Info.MixDigest()),
 		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
 		Transactions:          txs,
-		NoTxPool:              false,
+		NoTxPool:              true,
 		GasLimit:              (*eth.Uint64Quantity)(&sysConfig.GasLimit),
 		Withdrawals:           withdrawals,
 		ParentBeaconBlockRoot: parentBeaconRoot,
