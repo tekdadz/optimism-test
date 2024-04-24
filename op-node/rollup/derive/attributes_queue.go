@@ -93,7 +93,7 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 
 	// we are verifying, not sequencing, we've got all transactions and do not pull from the tx-pool
 	// (that would make the block derivation non-deterministic)
-	attrs.NoTxPool = false // fixed mine
+	attrs.NoTxPool = true
 	attrs.Transactions = append(attrs.Transactions, batch.Transactions...)
 
 	aq.log.Info("generated attributes in payload queue", "txs", len(attrs.Transactions), "timestamp", batch.Timestamp)

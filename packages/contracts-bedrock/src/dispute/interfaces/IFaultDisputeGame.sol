@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.15;
+pragma solidity ^0.8.0;
 
 import { IDisputeGame } from "./IDisputeGame.sol";
 
@@ -60,11 +60,17 @@ interface IFaultDisputeGame is IDisputeGame {
     ///      A subgame root claims is valid if, and only if, all of its child claims are invalid.
     ///      At the deepest level in the DAG, a claim is invalid if there's a successful step against it.
     /// @param _claimIndex The index of the subgame root claim to resolve.
-    function resolveClaim(uint256 _claimIndex) external payable;
-
-    /// @notice A block hash on the L1 that contains the disputed output root.
-    function l1Head() external view returns (Hash l1Head_);
+    function resolveClaim(uint256 _claimIndex) external;
 
     /// @notice The l2BlockNumber of the disputed output root in the `L2OutputOracle`.
     function l2BlockNumber() external view returns (uint256 l2BlockNumber_);
+
+    /// @notice Starting output root and block number of the game.
+    function startingOutputRoot() external view returns (Hash startingRoot_, uint256 l2BlockNumber_);
+
+    /// @notice Only the starting block number of the game.
+    function startingBlockNumber() external view returns (uint256 startingBlockNumber_);
+
+    /// @notice Only the starting output root of the game.
+    function startingRootHash() external view returns (Hash startingRootHash_);
 }

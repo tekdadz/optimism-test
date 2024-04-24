@@ -119,7 +119,6 @@ type Driver struct {
 func (s *Driver) Start() error {
 	s.derivation.Reset()
 
-	log.Info("=========Starting driver================", "sequencerEnabled", s.driverConfig.SequencerEnabled, "sequencerStopped", s.driverConfig.SequencerStopped)
 	if s.driverConfig.SequencerEnabled {
 		// Notify the initial sequencer state
 		// This ensures persistence can write the state correctly and that the state file exists
@@ -205,7 +204,6 @@ func (s *Driver) logSyncProgress(reason string) {
 // the eventLoop responds to L1 changes and internal timers to produce L2 blocks.
 func (s *Driver) eventLoop() {
 	defer s.wg.Done()
-	s.log.Info("=======================Step3: EVENT LOOP      State loop started============================")
 	defer s.log.Info("State loop returned")
 
 	defer s.driverCancel()
@@ -306,7 +304,6 @@ func (s *Driver) eventLoop() {
 			lastUnsafeL2 = head
 			altSyncTicker.Reset(syncCheckInterval)
 		}
-		s.log.Info("=======================Step4: sequencerCh     ============================", sequencerCh)
 
 		select {
 		case <-sequencerCh:

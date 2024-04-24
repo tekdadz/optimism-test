@@ -116,7 +116,6 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	if err := cfg.LoadPersisted(log); err != nil {
 		return nil, fmt.Errorf("failed to load driver config: %w", err)
 	}
-	log.Info("===================Step1: Config========================", cfg.ConductorEnabled, cfg)
 	// conductor controls the sequencer state
 	if cfg.ConductorEnabled {
 		cfg.Driver.SequencerStopped = true
@@ -190,10 +189,9 @@ func NewConfigPersistence(ctx *cli.Context) node.ConfigPersistence {
 
 func NewDriverConfig(ctx *cli.Context) *driver.Config {
 	return &driver.Config{
-		VerifierConfDepth:  ctx.Uint64(flags.VerifierL1Confs.Name),
-		SequencerConfDepth: ctx.Uint64(flags.SequencerL1Confs.Name),
-		// SequencerEnabled:    ctx.Bool(flags.SequencerEnabledFlag.Name),
-		SequencerEnabled:    true, //fixed mine
+		VerifierConfDepth:   ctx.Uint64(flags.VerifierL1Confs.Name),
+		SequencerConfDepth:  ctx.Uint64(flags.SequencerL1Confs.Name),
+		SequencerEnabled:    ctx.Bool(flags.SequencerEnabledFlag.Name),
 		SequencerStopped:    ctx.Bool(flags.SequencerStoppedFlag.Name),
 		SequencerMaxSafeLag: ctx.Uint64(flags.SequencerMaxSafeLagFlag.Name),
 	}

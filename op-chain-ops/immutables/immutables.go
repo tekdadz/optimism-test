@@ -162,10 +162,11 @@ func Deploy(config *PredeploysImmutableConfig) (DeploymentResults, error) {
 // can be properly set. The bytecode returned in the results is suitable to be
 // inserted into the state via state surgery.
 func deployContractsWithImmutables(constructors []deployer.Constructor) (DeploymentResults, error) {
-	backend, err := deployer.NewL2Backend()
+	backend, err := deployer.NewBackend()
 	if err != nil {
 		return nil, err
 	}
+	defer backend.Close()
 	deployments, err := deployer.Deploy(backend, constructors, l2ImmutableDeployer)
 	if err != nil {
 		return nil, err
@@ -192,10 +193,6 @@ func l2ImmutableDeployer(backend *backends.SimulatedBackend, opts *bind.Transact
 	}
 
 	switch deployment.Name {
-	case "L2CrossDomainMessenger":
-		_, tx, _, err = bindings.DeployL2CrossDomainMessenger(opts, backend)
-	case "L2StandardBridge":
-		_, tx, _, err = bindings.DeployL2StandardBridge(opts, backend)
 	case "SequencerFeeVault":
 		recipient, minimumWithdrawalAmount, withdrawalNetwork, err = prepareFeeVaultArguments(deployment)
 		if err != nil {
@@ -214,10 +211,6 @@ func l2ImmutableDeployer(backend *backends.SimulatedBackend, opts *bind.Transact
 			return nil, err
 		}
 		_, tx, _, err = bindings.DeployL1FeeVault(opts, backend, recipient, minimumWithdrawalAmount, withdrawalNetwork)
-	case "OptimismMintableERC20Factory":
-		_, tx, _, err = bindings.DeployOptimismMintableERC20Factory(opts, backend)
-	case "L2ERC721Bridge":
-		_, tx, _, err = bindings.DeployL2ERC721Bridge(opts, backend)
 	case "OptimismMintableERC721Factory":
 		bridge, ok := deployment.Args[0].(common.Address)
 		if !ok {

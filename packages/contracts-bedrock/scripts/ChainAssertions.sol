@@ -10,6 +10,7 @@ import { Constants } from "src/libraries/Constants.sol";
 import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { DisputeGameFactory } from "src/dispute/DisputeGameFactory.sol";
+import { DelayedWETH } from "src/dispute/weth/DelayedWETH.sol";
 import { ProtocolVersion, ProtocolVersions } from "src/L1/ProtocolVersions.sol";
 import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
@@ -178,6 +179,32 @@ library ChainAssertions {
         require(factory.owner() == _expectedOwner);
     }
 
+    /// @notice Asserts that the DelayedWETH is setup correctly
+    function checkDelayedWETH(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy,
+        address _expectedOwner
+    )
+        internal
+        view
+    {
+        console.log("Running chain assertions on the DelayedWETH");
+        DelayedWETH weth = DelayedWETH(payable(_contracts.DelayedWETH));
+
+        // Check that the contract is initialized
+        assertSlotValueIsOne({ _contractAddress: address(weth), _slot: 0, _offset: 0 });
+
+        if (_isProxy) {
+            require(weth.owner() == _expectedOwner);
+            require(weth.delay() == _cfg.faultGameWithdrawalDelay());
+            require(weth.config() == SuperchainConfig(_contracts.SuperchainConfig));
+        } else {
+            require(weth.owner() == _expectedOwner);
+            require(weth.delay() == _cfg.faultGameWithdrawalDelay());
+        }
+    }
+
     /// @notice Asserts that the L2OutputOracle is setup correctly
     function checkL2OutputOracle(
         Types.ContractSet memory _contracts,
@@ -277,19 +304,14 @@ library ChainAssertions {
         }
 
         if (_isProxy) {
-            require(address(portal.L2_ORACLE()) == _contracts.L2OutputOracle);
             require(address(portal.l2Oracle()) == _contracts.L2OutputOracle);
-            require(address(portal.SYSTEM_CONFIG()) == _contracts.SystemConfig);
             require(address(portal.systemConfig()) == _contracts.SystemConfig);
-            require(portal.GUARDIAN() == guardian);
             require(portal.guardian() == guardian);
             require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
             require(portal.paused() == SuperchainConfig(_contracts.SuperchainConfig).paused());
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
         } else {
-            require(address(portal.L2_ORACLE()) == address(0));
             require(address(portal.l2Oracle()) == address(0));
-            require(address(portal.SYSTEM_CONFIG()) == address(0));
             require(address(portal.systemConfig()) == address(0));
             require(address(portal.superchainConfig()) == address(0));
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
@@ -319,16 +341,13 @@ library ChainAssertions {
 
         if (_isProxy) {
             require(address(portal.disputeGameFactory()) == _contracts.DisputeGameFactory);
-            require(address(portal.SYSTEM_CONFIG()) == _contracts.SystemConfig);
             require(address(portal.systemConfig()) == _contracts.SystemConfig);
-            require(portal.GUARDIAN() == guardian);
             require(portal.guardian() == guardian);
             require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
             require(portal.paused() == SuperchainConfig(_contracts.SuperchainConfig).paused());
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
         } else {
             require(address(portal.disputeGameFactory()) == address(0));
-            require(address(portal.SYSTEM_CONFIG()) == address(0));
             require(address(portal.systemConfig()) == address(0));
             require(address(portal.superchainConfig()) == address(0));
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);

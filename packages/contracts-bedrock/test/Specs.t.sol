@@ -9,6 +9,7 @@ import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { OptimismPortal2 } from "src/L1/OptimismPortal2.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
 import { DataAvailabilityChallenge } from "src/L1/DataAvailabilityChallenge.sol";
+import { ForgeArtifacts, Abi, AbiEntry } from "scripts/ForgeArtifacts.sol";
 
 /// @title Specification_Test
 /// @dev Specifies common security properties of entrypoints to L1 contracts, including authorization and
@@ -17,16 +18,6 @@ import { DataAvailabilityChallenge } from "src/L1/DataAvailabilityChallenge.sol"
 ///      properties of the new function. The `Spec` struct reppresents this documentation. However, this contract does
 ///      not actually test to verify these properties, only that a spec is defined.
 contract Specification_Test is CommonTest {
-    struct AbiEntry {
-        string fnName;
-        bytes4 sel;
-    }
-
-    struct Abi {
-        string contractName;
-        AbiEntry[] entries;
-    }
-
     enum Role {
         NOAUTH,
         PROPOSER,
@@ -241,9 +232,6 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "L2OutputOracle", _sel: _getSel("version()") });
 
         // OptimismPortal
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("GUARDIAN()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("L2_ORACLE()") });
-        _addSpec({ _name: "OptimismPortal", _sel: _getSel("SYSTEM_CONFIG()") });
         _addSpec({ _name: "OptimismPortal", _sel: _getSel("depositTransaction(address,uint256,uint64,bool,bytes)") });
         _addSpec({ _name: "OptimismPortal", _sel: _getSel("donateETH()") });
         _addSpec({
@@ -267,8 +255,6 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OptimismPortal", _sel: _getSel("version()") });
 
         // OptimismPortal2
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("GUARDIAN()") });
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("SYSTEM_CONFIG()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("depositTransaction(address,uint256,uint64,bool,bytes)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("donateETH()") });
         _addSpec({
@@ -276,15 +262,20 @@ contract Specification_Test is CommonTest {
             _sel: OptimismPortal2.finalizeWithdrawalTransaction.selector,
             _pausable: true
         });
+        _addSpec({
+            _name: "OptimismPortal2",
+            _sel: OptimismPortal2.finalizeWithdrawalTransactionExternalProof.selector,
+            _pausable: true
+        });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("finalizedWithdrawals(bytes32)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("guardian()") });
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("initialize(address,address,address)") });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("initialize(address,address,address,uint32)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("l2Sender()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("minimumGasLimit(uint64)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("params()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("paused()") });
         _addSpec({ _name: "OptimismPortal2", _sel: OptimismPortal2.proveWithdrawalTransaction.selector, _pausable: true });
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("provenWithdrawals(bytes32)") });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("provenWithdrawals(bytes32,address)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("superchainConfig()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("systemConfig()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("version()") });
@@ -293,10 +284,12 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("respectedGameType()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("blacklistDisputeGame(address)"), _auth: Role.GUARDIAN });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("setRespectedGameType(uint32)"), _auth: Role.GUARDIAN });
-        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("checkWithdrawal(bytes32)") });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("checkWithdrawal(bytes32,address)") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("proofMaturityDelaySeconds()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("disputeGameFinalityDelaySeconds()") });
         _addSpec({ _name: "OptimismPortal2", _sel: _getSel("respectedGameTypeUpdatedAt()") });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("proofSubmitters(bytes32,uint256)") });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("numProofSubmitters(bytes32)") });
 
         // ProtocolVersions
         _addSpec({ _name: "ProtocolVersions", _sel: _getSel("RECOMMENDED_SLOT()") });
@@ -482,7 +475,7 @@ contract Specification_Test is CommonTest {
 
     /// @notice Ensures that there's an auth spec for every L1 contract function.
     function testContractAuth() public {
-        Abi[] memory abis = _getL1ContractFunctionAbis();
+        Abi[] memory abis = ForgeArtifacts.getContractFunctionAbis("src/{L1,governance,universal/ProxyAdmin.sol}", "");
 
         for (uint256 i = 0; i < abis.length; i++) {
             string memory contractName = abis[i].contractName;
@@ -498,38 +491,6 @@ contract Specification_Test is CommonTest {
                 Spec memory spec = specs[contractName][abiEntry.sel];
                 assertTrue(spec.sel != bytes4(0), "Specification_Test: missing spec definition");
                 assertEq(abiEntry.sel, spec.sel, "Specification_Test: invalid ABI");
-            }
-        }
-    }
-
-    /// @dev Returns the function ABIs of all L1 contracts.
-    function _getL1ContractFunctionAbis() internal returns (Abi[] memory abis_) {
-        string[] memory command = new string[](3);
-        command[0] = Executables.bash;
-        command[1] = "-c";
-        command[2] = string.concat(
-            Executables.find,
-            " src/{L1,governance,universal/ProxyAdmin.sol} -type f -exec basename {} \\;",
-            " | ",
-            Executables.sed,
-            " 's/\\.[^.]*$//'",
-            " | ",
-            Executables.jq,
-            " -R -s 'split(\"\n\")[:-1]'"
-        );
-        string[] memory contractNames = abi.decode(vm.parseJson(string(vm.ffi(command))), (string[]));
-
-        abis_ = new Abi[](contractNames.length);
-
-        for (uint256 i; i < contractNames.length; i++) {
-            string memory contractName = contractNames[i];
-            string[] memory methodIdentifiers = deploy.getMethodIdentifiers(contractName);
-            abis_[i].contractName = contractName;
-            abis_[i].entries = new AbiEntry[](methodIdentifiers.length);
-            for (uint256 j; j < methodIdentifiers.length; j++) {
-                string memory fnName = methodIdentifiers[j];
-                bytes4 sel = bytes4(keccak256(abi.encodePacked(fnName)));
-                abis_[i].entries[j] = AbiEntry({ fnName: fnName, sel: sel });
             }
         }
     }

@@ -74,7 +74,7 @@ func TestAttributesQueue(t *testing.T) {
 		PrevRandao:            eth.Bytes32(l1Info.InfoMixDigest),
 		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
 		Transactions:          []eth.Data{l1InfoTx, eth.Data("foobar"), eth.Data("example")},
-		NoTxPool:              false, // fixed mine
+		NoTxPool:              true,
 		GasLimit:              (*eth.Uint64Quantity)(&expectedL1Cfg.GasLimit),
 	}
 	attrBuilder := NewFetchingAttributesBuilder(cfg, l1Fetcher, l2Fetcher)

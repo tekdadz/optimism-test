@@ -116,16 +116,18 @@ contract OptimismPortal2_Invariant_Harness is CommonTest {
         // Create a dispute game with the output root we've proposed.
         _proposedBlockNumber = 0xFF;
         FaultDisputeGame game = FaultDisputeGame(
-            address(
-                disputeGameFactory.create(
-                    optimismPortal2.respectedGameType(), Claim.wrap(_outputRoot), abi.encode(_proposedBlockNumber)
+            payable(
+                address(
+                    disputeGameFactory.create(
+                        optimismPortal2.respectedGameType(), Claim.wrap(_outputRoot), abi.encode(_proposedBlockNumber)
+                    )
                 )
             )
         );
         _proposedGameIndex = disputeGameFactory.gameCount() - 1;
 
         // Warp beyond the finalization period for the dispute game and resolve it.
-        vm.warp(block.timestamp + game.gameDuration().raw() + 1 seconds);
+        vm.warp(block.timestamp + (game.maxClockDuration().raw() * 2) + 1 seconds);
         game.resolveClaim(0);
         game.resolve();
 
@@ -155,7 +157,7 @@ contract OptimismPortal2_Deposit_Invariant is CommonTest {
     ///
     ///                   All deposits, barring creation transactions and transactions
     ///                   sent to `address(0)`, should always succeed.
-    function invariant_deposit_completes() external {
+    function invariant_deposit_completes() external view {
         assertEq(actor.failedToComplete(), false);
     }
 }

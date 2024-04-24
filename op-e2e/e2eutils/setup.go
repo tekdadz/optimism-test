@@ -44,6 +44,7 @@ type TestParams struct {
 	SequencerWindowSize uint64
 	ChannelTimeout      uint64
 	L1BlockTime         uint64
+	UsePlasma           bool
 }
 
 func MakeDeployParams(t require.TestingT, tp *TestParams) *DeployParams {
@@ -57,6 +58,7 @@ func MakeDeployParams(t require.TestingT, tp *TestParams) *DeployParams {
 	deployConfig.SequencerWindowSize = tp.SequencerWindowSize
 	deployConfig.ChannelTimeout = tp.ChannelTimeout
 	deployConfig.L1BlockTime = tp.L1BlockTime
+	deployConfig.UsePlasma = tp.UsePlasma
 	ApplyDeployConfigForks(deployConfig)
 
 	require.NoError(t, deployConfig.Check())
@@ -161,6 +163,10 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 		EcotoneTime:            deployConf.EcotoneTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		FjordTime:              deployConf.FjordTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		InteropTime:            deployConf.InteropTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		DAChallengeAddress:     l1Deployments.DataAvailabilityChallengeProxy,
+		DAChallengeWindow:      deployConf.DAChallengeWindow,
+		DAResolveWindow:        deployConf.DAResolveWindow,
+		UsePlasma:              deployConf.UsePlasma,
 	}
 
 	require.NoError(t, rollupCfg.Check())
@@ -182,7 +188,7 @@ func SystemConfigFromDeployConfig(deployConfig *genesis.DeployConfig) eth.System
 	return eth.SystemConfig{
 		BatcherAddr: deployConfig.BatchSenderAddress,
 		Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleOverhead))),
-		Scalar:      eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(deployConfig.GasPriceOracleScalar))),
+		Scalar:      eth.Bytes32(deployConfig.FeeScalar()),
 		GasLimit:    uint64(deployConfig.L2GenesisBlockGasLimit),
 	}
 }
@@ -207,4 +213,8 @@ func ApplyDeployConfigForks(deployConfig *genesis.DeployConfig) {
 
 func UseFPAC() bool {
 	return os.Getenv("OP_E2E_USE_FPAC") == "true"
+}
+
+func UsePlasma() bool {
+	return os.Getenv("OP_E2E_USE_PLASMA") == "true"
 }

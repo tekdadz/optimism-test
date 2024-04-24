@@ -13,8 +13,11 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-type Detect func(ctx context.Context, games []*types.EnrichedGameData)
 type Forecast func(ctx context.Context, games []*types.EnrichedGameData)
+type Bonds func(games []*types.EnrichedGameData)
+type Resolutions func(games []*types.EnrichedGameData)
+type MonitorClaims func(games []*types.EnrichedGameData)
+type MonitorWithdrawals func(games []*types.EnrichedGameData)
 type BlockHashFetcher func(ctx context.Context, number *big.Int) (common.Hash, error)
 type BlockNumberFetcher func(ctx context.Context) (uint64, error)
 type Extract func(ctx context.Context, blockHash common.Hash, minTimestamp uint64) ([]*types.EnrichedGameData, error)
@@ -32,8 +35,11 @@ type gameMonitor struct {
 	monitorInterval time.Duration
 
 	delays           RecordClaimResolutionDelayMax
-	detect           Detect
 	forecast         Forecast
+	bonds            Bonds
+	resolutions      Resolutions
+	claims           MonitorClaims
+	withdrawals      MonitorWithdrawals
 	extract          Extract
 	fetchBlockHash   BlockHashFetcher
 	fetchBlockNumber BlockNumberFetcher
@@ -46,8 +52,11 @@ func newGameMonitor(
 	monitorInterval time.Duration,
 	gameWindow time.Duration,
 	delays RecordClaimResolutionDelayMax,
-	detect Detect,
 	forecast Forecast,
+	bonds Bonds,
+	resolutions Resolutions,
+	claims MonitorClaims,
+	withdrawals MonitorWithdrawals,
 	extract Extract,
 	fetchBlockNumber BlockNumberFetcher,
 	fetchBlockHash BlockHashFetcher,
@@ -60,43 +69,38 @@ func newGameMonitor(
 		monitorInterval:  monitorInterval,
 		gameWindow:       gameWindow,
 		delays:           delays,
-		detect:           detect,
 		forecast:         forecast,
+		bonds:            bonds,
+		resolutions:      resolutions,
+		claims:           claims,
+		withdrawals:      withdrawals,
 		extract:          extract,
 		fetchBlockNumber: fetchBlockNumber,
 		fetchBlockHash:   fetchBlockHash,
 	}
 }
 
-func (m *gameMonitor) minGameTimestamp() uint64 {
-	if m.gameWindow.Seconds() == 0 {
-		return 0
-	}
-	// time: "To compute t-d for a duration d, use t.Add(-d)."
-	// https://pkg.go.dev/time#Time.Sub
-	if m.clock.Now().Unix() > int64(m.gameWindow.Seconds()) {
-		return uint64(m.clock.Now().Add(-m.gameWindow).Unix())
-	}
-	return 0
-}
-
 func (m *gameMonitor) monitorGames() error {
 	blockNumber, err := m.fetchBlockNumber(m.ctx)
 	if err != nil {
-		return fmt.Errorf("Failed to fetch block number: %w", err)
+		return fmt.Errorf("failed to fetch block number: %w", err)
 	}
 	m.logger.Debug("Fetched block number", "blockNumber", blockNumber)
 	blockHash, err := m.fetchBlockHash(context.Background(), new(big.Int).SetUint64(blockNumber))
 	if err != nil {
-		return fmt.Errorf("Failed to fetch block hash: %w", err)
+		return fmt.Errorf("failed to fetch block hash: %w", err)
 	}
-	enrichedGames, err := m.extract(m.ctx, blockHash, m.minGameTimestamp())
+	minGameTimestamp := clock.MinCheckedTimestamp(m.clock, m.gameWindow)
+	enrichedGames, err := m.extract(m.ctx, blockHash, minGameTimestamp)
 	if err != nil {
 		return fmt.Errorf("failed to load games: %w", err)
 	}
+	m.resolutions(enrichedGames)
 	m.delays(enrichedGames)
-	m.detect(m.ctx, enrichedGames)
 	m.forecast(m.ctx, enrichedGames)
+	m.bonds(enrichedGames)
+	m.claims(enrichedGames)
+	m.withdrawals(enrichedGames)
 	return nil
 }
 

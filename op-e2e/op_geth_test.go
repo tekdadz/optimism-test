@@ -179,7 +179,7 @@ func TestGethOnlyPendingBlockIsLatest(t *testing.T) {
 	// start building a block
 	attrs, err := opGeth.CreatePayloadAttributes()
 	require.NoError(t, err)
-	attrs.NoTxPool = false // we want to include a tx
+	attrs.NoTxPool = true
 	fc := eth.ForkchoiceState{
 		HeadBlockHash: opGeth.L2Head.BlockHash,
 		SafeBlockHash: opGeth.L2Head.BlockHash,

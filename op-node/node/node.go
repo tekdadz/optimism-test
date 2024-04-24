@@ -386,10 +386,12 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config, snapshotLog log.Logger
 		sequencerConductor = NewConductorClient(cfg, n.log, n.metrics)
 	}
 
-	plasmaDA := plasma.NewPlasmaDA(n.log, cfg.Plasma)
-	if cfg.Plasma.Enabled {
-		n.log.Info("Plasma DA enabled", "da_server", cfg.Plasma.DAServerURL)
+	// if plasma is not explicitly activated in the node CLI, the config + any error will be ignored.
+	rpCfg, err := cfg.Rollup.PlasmaConfig()
+	if cfg.Plasma.Enabled && err != nil {
+		return fmt.Errorf("failed to get plasma config: %w", err)
 	}
+	plasmaDA := plasma.NewPlasmaDA(n.log, cfg.Plasma, rpCfg, n.metrics.PlasmaMetrics)
 	if cfg.SafeDBPath != "" {
 		n.log.Info("Safe head database enabled", "path", cfg.SafeDBPath)
 		safeDB, err := safedb.NewSafeDB(n.log, cfg.SafeDBPath)
@@ -401,7 +403,6 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config, snapshotLog log.Logger
 		n.safeDB = safedb.Disabled
 	}
 	n.l2Driver = driver.NewDriver(&cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source, n.beacon, n, n, n.log, snapshotLog, n.metrics, cfg.ConfigPersistence, n.safeDB, &cfg.Sync, sequencerConductor, plasmaDA)
-	log.Info("======================Step2 : l2Driver==========================", n.l2Driver)
 	return nil
 }
 

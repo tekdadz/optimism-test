@@ -45,13 +45,13 @@ type Timestamp is uint64;
 /// @dev Unit: seconds
 type Duration is uint64;
 
-/// @notice A `GameId` represents a packed 1 byte game ID, an 11 byte timestamp, and a 20 byte address.
+/// @notice A `GameId` represents a packed 4 byte game ID, a 8 byte timestamp, and a 20 byte address.
 /// @dev The packed layout of this type is as follows:
 /// ┌───────────┬───────────┐
 /// │   Bits    │   Value   │
 /// ├───────────┼───────────┤
-/// │ [0, 8)    │ Game Type │
-/// │ [8, 96)   │ Timestamp │
+/// │ [0, 32)   │ Game Type │
+/// │ [32, 96)  │ Timestamp │
 /// │ [96, 256) │ Address   │
 /// └───────────┴───────────┘
 type GameId is bytes32;
@@ -89,6 +89,14 @@ enum GameStatus {
     DEFENDER_WINS
 }
 
+/// @notice Represents an L2 output root and the L2 block number at which it was generated.
+/// @custom:field root The output root.
+/// @custom:field l2BlockNumber The L2 block number at which the output root was generated.
+struct OutputRoot {
+    Hash root;
+    uint256 l2BlockNumber;
+}
+
 /// @title GameTypes
 /// @notice A library that defines the IDs of games that can be played.
 library GameTypes {
@@ -97,6 +105,9 @@ library GameTypes {
 
     /// @dev A permissioned dispute game type the uses the cannon vm.
     GameType internal constant PERMISSIONED_CANNON = GameType.wrap(1);
+
+    /// @notice A dispute game type the uses the asterisc VM
+    GameType internal constant ASTERISC = GameType.wrap(2);
 
     /// @notice A dispute game type that uses an alphabet vm.
     ///         Not intended for production use.
@@ -131,8 +142,8 @@ library LocalPreimageKey {
     /// @notice The identifier for the disputed output root.
     uint256 internal constant DISPUTED_OUTPUT_ROOT = 0x03;
 
-    /// @notice The identifier for the starting L2 block number.
-    uint256 internal constant STARTING_L2_BLOCK_NUMBER = 0x04;
+    /// @notice The identifier for the disputed L2 block number.
+    uint256 internal constant DISPUTED_L2_BLOCK_NUMBER = 0x04;
 
     /// @notice The identifier for the chain ID.
     uint256 internal constant CHAIN_ID = 0x05;

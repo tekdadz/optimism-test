@@ -72,12 +72,12 @@ func (m *MIPSEVM) Step(t *testing.T, stepWitness *StepWitness) []byte {
 		t.Logf("reading preimage key %x at offset %d", stepWitness.PreimageKey, stepWitness.PreimageOffset)
 		poInput, err := encodePreimageOracleInput(t, stepWitness, LocalContext{}, m.localOracle)
 		require.NoError(t, err, "encode preimage oracle input")
-		_, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.Oracle, poInput, startingGas, big.NewInt(0))
+		_, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.Oracle, poInput, startingGas, common.U2560)
 		require.NoErrorf(t, err, "evm should not fail, took %d gas", startingGas-leftOverGas)
 	}
 
 	input := encodeStepInput(t, stepWitness, LocalContext{})
-	ret, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.MIPS, input, startingGas, big.NewInt(0))
+	ret, leftOverGas, err := m.env.Call(vm.AccountRef(sender), m.addrs.MIPS, input, startingGas, common.U2560)
 	require.NoError(t, err, "evm should not fail")
 	require.Len(t, ret, 32, "expecting 32-byte state hash")
 	// remember state hash, to check it against state
@@ -136,15 +136,18 @@ func encodePreimageOracleInput(t *testing.T, wit *StepWitness, localContext Loca
 			wit.PreimageValue[8:])
 		require.NoError(t, err)
 		return input, nil
-	case preimage.KZGPointEvaluationKeyType:
+	case preimage.PrecompileKeyType:
 		if localOracle == nil {
-			return nil, fmt.Errorf("local oracle is required for point evaluation preimages")
+			return nil, fmt.Errorf("local oracle is required for precompile preimages")
 		}
 		preimage := localOracle.GetPreimage(preimage.Keccak256Key(wit.PreimageKey).PreimageKey())
+		precompile := common.BytesToAddress(preimage[:20])
+		callInput := preimage[20:]
 		input, err := preimageAbi.Pack(
-			"loadKZGPointEvaluationPreimagePart",
+			"loadPrecompilePreimagePart",
 			new(big.Int).SetUint64(uint64(wit.PreimageOffset)),
-			preimage,
+			precompile,
+			callInput,
 		)
 		require.NoError(t, err)
 		return input, nil
@@ -199,8 +202,8 @@ func TestEVM(t *testing.T) {
 				// verify the post-state matches.
 				// TODO: maybe more readable to decode the evmPost state, and do attribute-wise comparison.
 				goPost := goState.state.EncodeWitness()
-				require.Equal(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
-					"mipsevm produced different state than EVM")
+				require.Equalf(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
+					"mipsevm produced different state than EVM at step %d", state.Step)
 			}
 			if exitGroup {
 				require.NotEqual(t, uint32(endAddr), goState.state.PC, "must not reach end")
@@ -290,7 +293,7 @@ func TestEVMFault(t *testing.T) {
 			input := encodeStepInput(t, stepWitness, LocalContext{})
 			startingGas := uint64(30_000_000)
 
-			_, _, err := env.Call(vm.AccountRef(sender), addrs.MIPS, input, startingGas, big.NewInt(0))
+			_, _, err := env.Call(vm.AccountRef(sender), addrs.MIPS, input, startingGas, common.U2560)
 			require.EqualValues(t, err, vm.ErrExecutionReverted)
 			logs := evmState.Logs()
 			require.Equal(t, 0, len(logs))

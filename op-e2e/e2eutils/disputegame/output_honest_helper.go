@@ -7,8 +7,11 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching/rpcblock"
 	"github.com/stretchr/testify/require"
 )
+
+const getTraceTimeout = 10 * time.Minute
 
 type OutputHonestHelper struct {
 	t            *testing.T
@@ -43,7 +46,7 @@ func (h *OutputHonestHelper) Attack(ctx context.Context, claimIdx int64, opts ..
 	// Ensure the claim exists
 	h.game.WaitForClaimCount(ctx, claimIdx+1)
 
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, getTraceTimeout)
 	defer cancel()
 
 	game, claim := h.loadState(ctx, claimIdx)
@@ -60,7 +63,7 @@ func (h *OutputHonestHelper) Defend(ctx context.Context, claimIdx int64, opts ..
 	// Ensure the claim exists
 	h.game.WaitForClaimCount(ctx, claimIdx+1)
 
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, getTraceTimeout)
 	defer cancel()
 	game, claim := h.loadState(ctx, claimIdx)
 	defendPos := claim.Position.Defend()
@@ -92,7 +95,7 @@ func (h *OutputHonestHelper) StepFails(ctx context.Context, claimIdx int64, isAt
 }
 
 func (h *OutputHonestHelper) loadState(ctx context.Context, claimIdx int64) (types.Game, types.Claim) {
-	claims, err := h.contract.GetAllClaims(ctx)
+	claims, err := h.contract.GetAllClaims(ctx, rpcblock.Latest)
 	h.require.NoError(err, "Failed to load claims from game")
 	game := types.NewGameState(claims, h.game.MaxDepth(ctx))
 

@@ -6,9 +6,21 @@ export FOUNDRY_PROFILE=kdeploy
 SCRIPT_HOME="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # shellcheck source=/dev/null
 source "$SCRIPT_HOME/common.sh"
-parse_args "$@"
+# Sanity check on arguments
+if [ $# -gt 1 ]; then
+  echo "At most one argument can be provided. Instead $# were provided" 1>&2
+  exit 1
+elif [ $# -eq 1 ]; then
+  if [ "$1" != "-h" ] && [ "$1" != "--help" ] && [ "$1" != "container" ] && [ "$1" != "local" ] && [ "$1" != "dev" ]; then
+    notif "Invalid argument. Must be \`container\`, \`local\`, \`dev\`, \`-h\` or \`--help\`"
+    exit 1
+  else
+    parse_first_arg "$@"
+  fi
+fi
 
 cleanup() {
+  trap
   # Restore the original script from the backup
   if [ -f "$DEPLOY_SCRIPT.bak" ]; then
     cp "$DEPLOY_SCRIPT.bak" "$DEPLOY_SCRIPT"
@@ -25,7 +37,7 @@ cleanup() {
 }
 
 # Set trap to call cleanup function on exit
-trap cleanup EXIT
+trap cleanup EXIT ERR
 
 # create deployments/hardhat/.deploy and snapshots/state-diff/Deploy.json if necessary
 if [ ! -d "deployments/hardhat" ]; then
@@ -74,7 +86,11 @@ SUMMARY_NAME=DeploymentSummary
 LICENSE=MIT
 
 copy_to_docker # Copy the newly generated files to the docker container
-run kontrol summary $SUMMARY_NAME snapshots/state-diff/$STATEDIFF --contract-names $CONTRACT_NAMES --output-dir $SUMMARY_DIR --license $LICENSE
+run kontrol load-state-diff $SUMMARY_NAME snapshots/state-diff/$STATEDIFF --contract-names $CONTRACT_NAMES --output-dir $SUMMARY_DIR --license $LICENSE
+if [ "$LOCAL" = false ]; then
+    # Sync Snapshot updates to the host
+    docker cp "$CONTAINER_NAME:/home/user/workspace/$SUMMARY_DIR" "$WORKSPACE_DIR/$SUMMARY_DIR/.."
+fi
 forge fmt $SUMMARY_DIR/$SUMMARY_NAME.sol
 forge fmt $SUMMARY_DIR/${SUMMARY_NAME}Code.sol
 echo "Added state updates to $SUMMARY_DIR/$SUMMARY_NAME.sol"

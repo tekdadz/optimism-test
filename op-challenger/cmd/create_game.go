@@ -43,7 +43,7 @@ func CreateGame(ctx *cli.Context) error {
 		return fmt.Errorf("failed to create dispute game factory bindings: %w", err)
 	}
 
-	txCandidate, err := contract.CreateTx(uint32(traceType), outputRoot, l2BlockNum)
+	txCandidate, err := contract.CreateTx(ctx.Context, uint32(traceType), outputRoot, l2BlockNum)
 	if err != nil {
 		return fmt.Errorf("failed to create tx: %w", err)
 	}
@@ -67,6 +67,7 @@ func createGameFlags() []cli.Flag {
 	cliFlags := []cli.Flag{
 		flags.L1EthRpcFlag,
 		flags.FactoryAddressFlag,
+		TraceTypeFlag,
 		OutputRootFlag,
 		L2BlockNumFlag,
 	}
@@ -81,5 +82,4 @@ var CreateGameCommand = &cli.Command{
 	Description: "Creates a dispute game via the factory",
 	Action:      CreateGame,
 	Flags:       createGameFlags(),
-	Hidden:      true,
 }

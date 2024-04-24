@@ -10,13 +10,16 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts"
+	contractMetrics "github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts/metrics"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/preimages"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/outputs"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
 	keccakTypes "github.com/ethereum-optimism/optimism/op-challenger/game/keccak/types"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	preimage "github.com/ethereum-optimism/optimism/op-preimage"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/sources/batching"
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching/rpcblock"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -85,9 +88,9 @@ func (g *OutputGameHelper) L2BlockNum(ctx context.Context) uint64 {
 	return blockNum.Uint64()
 }
 
-func (g *OutputGameHelper) GenesisBlockNum(ctx context.Context) uint64 {
-	blockNum, err := g.game.GenesisBlockNumber(&bind.CallOpts{Context: ctx})
-	g.require.NoError(err, "failed to load genesis block number")
+func (g *OutputGameHelper) StartingBlockNum(ctx context.Context) uint64 {
+	blockNum, err := g.game.StartingBlockNumber(&bind.CallOpts{Context: ctx})
+	g.require.NoError(err, "failed to load starting block number")
 	return blockNum.Uint64()
 }
 
@@ -109,7 +112,7 @@ func (g *OutputGameHelper) DisputeBlock(ctx context.Context, disputeBlockNum uin
 	}
 	pos := types.NewPositionFromGIndex(big.NewInt(1))
 	getClaimValue := func(parentClaim *ClaimHelper, claimPos types.Position) common.Hash {
-		claimBlockNum, err := g.correctOutputProvider.BlockNumber(claimPos)
+		claimBlockNum, err := g.correctOutputProvider.ClaimedBlockNumber(claimPos)
 		g.require.NoError(err, "failed to calculate claim block number")
 		if claimBlockNum < disputeBlockNum {
 			// Use the correct output root for all claims prior to the dispute block number
@@ -127,7 +130,7 @@ func (g *OutputGameHelper) DisputeBlock(ctx context.Context, disputeBlockNum uin
 
 	claim := g.RootClaim(ctx)
 	for !claim.IsOutputRootLeaf(ctx) {
-		parentClaimBlockNum, err := g.correctOutputProvider.BlockNumber(pos)
+		parentClaimBlockNum, err := g.correctOutputProvider.ClaimedBlockNumber(pos)
 		g.require.NoError(err, "failed to calculate parent claim block number")
 		if parentClaimBlockNum >= disputeBlockNum {
 			pos = pos.Attack()
@@ -158,10 +161,54 @@ func (g *OutputGameHelper) correctOutputRoot(ctx context.Context, pos types.Posi
 	return outputRoot
 }
 
-func (g *OutputGameHelper) GameDuration(ctx context.Context) time.Duration {
-	duration, err := g.game.GameDuration(&bind.CallOpts{Context: ctx})
-	g.require.NoError(err, "failed to get game duration")
+func (g *OutputGameHelper) MaxClockDuration(ctx context.Context) time.Duration {
+	duration, err := g.game.MaxClockDuration(&bind.CallOpts{Context: ctx})
+	g.require.NoError(err, "failed to get max clock duration")
 	return time.Duration(duration) * time.Second
+}
+
+func (g *OutputGameHelper) WaitForNoAvailableCredit(ctx context.Context, addr common.Address) {
+	timedCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+	err := wait.For(timedCtx, time.Second, func() (bool, error) {
+		bal, err := g.game.Credit(&bind.CallOpts{Context: timedCtx}, addr)
+		if err != nil {
+			return false, err
+		}
+		g.t.Log("Waiting for zero available credit", "current", bal, "addr", addr)
+		return bal.Cmp(big.NewInt(0)) == 0, nil
+	})
+	if err != nil {
+		g.LogGameData(ctx)
+		g.require.NoError(err, "Failed to wait for zero available credit")
+	}
+}
+
+func (g *OutputGameHelper) AvailableCredit(ctx context.Context, addr common.Address) *big.Int {
+	credit, err := g.game.Credit(&bind.CallOpts{Context: ctx}, addr)
+	g.require.NoErrorf(err, "Failed to fetch available credit for %v", addr)
+	return credit
+}
+
+func (g *OutputGameHelper) CreditUnlockDuration(ctx context.Context) time.Duration {
+	weth, err := g.game.Weth(&bind.CallOpts{Context: ctx})
+	g.require.NoError(err, "Failed to get WETH contract")
+	contract, err := bindings.NewDelayedWETH(weth, g.client)
+	g.require.NoError(err)
+	period, err := contract.Delay(&bind.CallOpts{Context: ctx})
+	g.require.NoError(err, "Failed to get WETH unlock period")
+	float, _ := period.Float64()
+	return time.Duration(float) * time.Second
+}
+
+func (g *OutputGameHelper) WethBalance(ctx context.Context, addr common.Address) *big.Int {
+	weth, err := g.game.Weth(&bind.CallOpts{Context: ctx})
+	g.require.NoError(err, "Failed to get WETH contract")
+	contract, err := bindings.NewDelayedWETH(weth, g.client)
+	g.require.NoError(err)
+	balance, err := contract.BalanceOf(&bind.CallOpts{Context: ctx}, addr)
+	g.require.NoError(err, "Failed to get WETH balance")
+	return balance
 }
 
 // WaitForClaimCount waits until there are at least count claims in the game.
@@ -610,7 +657,7 @@ func (g *OutputGameHelper) WaitForChallengePeriodStart(ctx context.Context, send
 func (g *OutputGameHelper) ChallengePeriodStartTime(ctx context.Context, sender common.Address, data *types.PreimageOracleData) uint64 {
 	oracle := g.oracle(ctx)
 	uuid := preimages.NewUUID(sender, data)
-	metadata, err := oracle.GetProposalMetadata(ctx, batching.BlockLatest, keccakTypes.LargePreimageIdent{
+	metadata, err := oracle.GetProposalMetadata(ctx, rpcblock.Latest, keccakTypes.LargePreimageIdent{
 		Claimant: sender,
 		UUID:     uuid,
 	})
@@ -638,8 +685,13 @@ func (g *OutputGameHelper) uploadPreimage(ctx context.Context, data *types.Preim
 	g.require.NoError(err)
 	var tx *gethtypes.Transaction
 	switch data.OracleKey[0] {
-	case byte(preimage.KZGPointEvaluationKeyType):
-		tx, err = boundOracle.LoadKZGPointEvaluationPreimagePart(g.opts, new(big.Int).SetUint64(uint64(data.OracleOffset)), data.GetPreimageWithoutSize())
+	case byte(preimage.PrecompileKeyType):
+		tx, err = boundOracle.LoadPrecompilePreimagePart(
+			g.opts,
+			new(big.Int).SetUint64(uint64(data.OracleOffset)),
+			data.GetPrecompileAddress(),
+			data.GetPrecompileInput(),
+		)
 	default:
 		tx, err = boundOracle.LoadKeccak256PreimagePart(g.opts, new(big.Int).SetUint64(uint64(data.OracleOffset)), data.GetPreimageWithoutSize())
 	}
@@ -650,7 +702,7 @@ func (g *OutputGameHelper) uploadPreimage(ctx context.Context, data *types.Preim
 
 func (g *OutputGameHelper) oracle(ctx context.Context) *contracts.PreimageOracleContract {
 	caller := batching.NewMultiCaller(g.system.NodeClient("l1").Client(), batching.DefaultBatchSize)
-	contract, err := contracts.NewFaultDisputeGameContract(g.addr, caller)
+	contract, err := contracts.NewFaultDisputeGameContract(contractMetrics.NoopContractMetrics, g.addr, caller)
 	g.require.NoError(err, "Failed to create game contract")
 	oracle, err := contract.GetOracle(ctx)
 	g.require.NoError(err, "Failed to create oracle contract")
@@ -671,7 +723,7 @@ func (g *OutputGameHelper) gameData(ctx context.Context) string {
 		pos := types.NewPositionFromGIndex(claim.Position)
 		extra := ""
 		if pos.Depth() <= splitDepth {
-			blockNum, err := g.correctOutputProvider.BlockNumber(pos)
+			blockNum, err := g.correctOutputProvider.ClaimedBlockNumber(pos)
 			if err != nil {
 			} else {
 				extra = fmt.Sprintf("Block num: %v", blockNum)
@@ -696,4 +748,13 @@ func (g *OutputGameHelper) Credit(ctx context.Context, addr common.Address) *big
 	amt, err := g.game.Credit(opts, addr)
 	g.require.NoError(err)
 	return amt
+}
+
+func (g *OutputGameHelper) getL1Head(ctx context.Context) eth.BlockID {
+	l1HeadHash, err := g.game.L1Head(&bind.CallOpts{Context: ctx})
+	g.require.NoError(err, "Failed to load L1 head")
+	l1Header, err := g.client.HeaderByHash(ctx, l1HeadHash)
+	g.require.NoError(err, "Failed to load L1 header")
+	l1Head := eth.HeaderBlockID(l1Header)
+	return l1Head
 }

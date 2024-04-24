@@ -29,6 +29,7 @@ log = logging.getLogger()
 # Global environment variables
 DEVNET_NO_BUILD = os.getenv('DEVNET_NO_BUILD') == "true"
 DEVNET_FPAC = os.getenv('DEVNET_FPAC') == "true"
+DEVNET_PLASMA = os.getenv('DEVNET_PLASMA') == "true"
 
 class Bunch:
     def __init__(self, **kwds):
@@ -129,7 +130,10 @@ def init_devnet_l1_deploy_config(paths, update_timestamp=False):
         deploy_config['l1GenesisBlockTimestamp'] = '{:#x}'.format(int(time.time()))
     if DEVNET_FPAC:
         deploy_config['useFaultProofs'] = True
-        deploy_config['faultGameMaxDuration'] = 10
+        deploy_config['faultGameMaxClockDuration'] = 10
+        deploy_config['faultGameWithdrawalDelay'] = 0
+    if DEVNET_PLASMA:
+        deploy_config['usePlasma'] = True
     write_json(paths.devnet_config_path, deploy_config)
 
 def devnet_l1_genesis(paths):
@@ -137,8 +141,9 @@ def devnet_l1_genesis(paths):
     init_devnet_l1_deploy_config(paths)
 
     fqn = 'scripts/Deploy.s.sol:Deploy'
+    # Use foundry pre-funded account #1 for the deployer
     run_command([
-        'forge', 'script', '--chain-id', '900', fqn, "--sig", "runWithStateDump()"
+        'forge', 'script', '--chain-id', '900', fqn, "--sig", "runWithStateDump()", "--private-key", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     forge_dump = read_json(paths.forge_dump_path)
@@ -153,7 +158,7 @@ def devnet_deploy(paths):
         log.info('L1 genesis already generated.')
     else:
         log.info('Generating L1 genesis.')
-        if os.path.exists(paths.allocs_path) == False or DEVNET_FPAC == True:
+        if not os.path.exists(paths.allocs_path) or DEVNET_FPAC:
             # If this is the FPAC devnet then we need to generate the allocs
             # file here always. This is because CI will run devnet-allocs
             # without DEVNET_FPAC=true which means the allocs will be wrong.
@@ -230,6 +235,11 @@ def devnet_deploy(paths):
     else:
         docker_env['L2OO_ADDRESS'] = l2_output_oracle
 
+    if DEVNET_PLASMA:
+        docker_env['PLASMA_ENABLED'] = 'true'
+    else:
+        docker_env['PLASMA_ENABLED'] = 'false'
+
     # Bring up the rest of the services.
     log.info('Bringing up `op-node`, `op-proposer` and `op-batcher`.')
     run_command(['docker', 'compose', 'up', '-d', 'op-node', 'op-proposer', 'op-batcher', 'artifact-server'], cwd=paths.ops_bedrock_dir, env=docker_env)
@@ -238,6 +248,11 @@ def devnet_deploy(paths):
     if DEVNET_FPAC:
         log.info('Bringing up `op-challenger`.')
         run_command(['docker', 'compose', 'up', '-d', 'op-challenger'], cwd=paths.ops_bedrock_dir, env=docker_env)
+
+    # Optionally bring up OP Plasma.
+    if DEVNET_PLASMA:
+        log.info('Bringing up `da-server`, `sentinel`.') # TODO(10141): We don't have public sentinel images yet
+        run_command(['docker', 'compose', 'up', '-d', 'da-server'], cwd=paths.ops_bedrock_dir, env=docker_env)
 
     # Fin.
     log.info('Devnet ready.')
@@ -279,7 +294,7 @@ def devnet_test(paths):
           ['npx', 'hardhat',  'deposit-eth', '--network',  'devnetL1',
            '--l1-contracts-json-path', paths.addresses_json_path, '--signer-index', '15'],
           cwd=paths.sdk_dir, timeout=8*60)
-    ], max_workers=2)
+    ], max_workers=1)
 
 
 def run_commands(commands: list[CommandPreset], max_workers=2):

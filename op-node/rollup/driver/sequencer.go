@@ -86,21 +86,19 @@ func (d *Sequencer) StartBuildingBlock(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
+	/* ================================= */
 	// If our next L2 block timestamp is beyond the Sequencer drift threshold, then we must produce
 	// empty blocks (other than the L1 info deposit and any user deposits). We handle this by
 	// setting NoTxPool to true, which will cause the Sequencer to not include any transactions
 	// from the transaction pool.
-	// attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+d.rollupCfg.MaxSequencerDrift
+	attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+d.rollupCfg.MaxSequencerDrift
 
-	// // For the Ecotone activation block we shouldn't include any sequencer transactions.
-	// if d.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {
-	// 	attrs.NoTxPool = false //fixed mine
-	// 	d.log.Info("Sequencing Ecotone upgrade block")
-	// }
-
-	attrs.NoTxPool = false //fixed
-
+	// For the Ecotone activation block we shouldn't include any sequencer transactions.
+	if d.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {
+		attrs.NoTxPool = true
+		d.log.Info("Sequencing Ecotone upgrade block")
+	}
+	/* ================================= */
 	d.log.Debug("prepared attributes for new block",
 		"num", l2Head.Number+1, "time", uint64(attrs.Timestamp),
 		"origin", l1Origin, "origin_time", l1Origin.Time, "noTxPool", attrs.NoTxPool)
@@ -134,18 +132,17 @@ func (d *Sequencer) CancelBuildingBlock(ctx context.Context) {
 
 // PlanNextSequencerAction returns a desired delay till the RunNextSequencerAction call.
 func (d *Sequencer) PlanNextSequencerAction() time.Duration {
+	buildingOnto, buildingID, safe := d.engine.BuildingPayload()
 	// If the engine is busy building safe blocks (and thus changing the head that we would sync on top of),
 	// then give it time to sync up.
-	if onto, _, safe := d.engine.BuildingPayload(); safe {
-		d.log.Warn("delaying sequencing to not interrupt safe-head changes", "onto", onto, "onto_time", onto.Time)
+	if safe {
+		d.log.Warn("delaying sequencing to not interrupt safe-head changes", "onto", buildingOnto, "onto_time", buildingOnto.Time)
 		// approximates the worst-case time it takes to build a block, to reattempt sequencing after.
 		return time.Second * time.Duration(d.rollupCfg.BlockTime)
 	}
 
 	head := d.engine.UnsafeL2Head()
 	now := d.timeNow()
-
-	buildingOnto, buildingID, _ := d.engine.BuildingPayload()
 
 	// We may have to wait till the next sequencing action, e.g. upon an error.
 	// If the head changed we need to respond and will not delay the sequencing.
@@ -210,7 +207,6 @@ func (d *Sequencer) BuildingOnto() eth.L2BlockRef {
 func (d *Sequencer) RunNextSequencerAction(ctx context.Context, agossip async.AsyncGossiper, sequencerConductor conductor.SequencerConductor) (*eth.ExecutionPayloadEnvelope, error) {
 	// if the engine returns a non-empty payload, OR if the async gossiper already has a payload, we can CompleteBuildingBlock
 	if onto, buildingID, safe := d.engine.BuildingPayload(); buildingID != (eth.PayloadID{}) || agossip.Get() != nil {
-		d.log.Info("==============================RunNextSequencerAction, first if========================")
 		if safe {
 			d.log.Warn("avoiding sequencing to not interrupt safe-head changes", "onto", onto, "onto_time", onto.Time)
 			// approximates the worst-case time it takes to build a block, to reattempt sequencing after.
@@ -244,7 +240,6 @@ func (d *Sequencer) RunNextSequencerAction(ctx context.Context, agossip async.As
 			return envelope, nil
 		}
 	} else {
-		d.log.Info("==============================RunNextSequencerAction, else,   STARTBUILDINGBLOCK========================")
 		err := d.StartBuildingBlock(ctx)
 		if err != nil {
 			if errors.Is(err, derive.ErrCritical) {
