@@ -52,7 +52,7 @@
     "@types/glob": "^8.1.0",
     "@vitest/coverage-istanbul": "^1.2.2",
     "@wagmi/cli": "^2.1.4",
-    "@wagmi/core": "^2.6.3",
+    "@wagmi/core": "^2.11.6",
     "abitype": "^1.0.2",
     "glob": "^10.3.10",
     "isomorphic-fetch": "^3.0.0",
@@ -65,7 +65,7 @@
     "vitest": "^1.2.2"
   },
   "peerDependencies": {
-    "@wagmi/core": "^2.6.3",
+    "@wagmi/core": "^2.11.6",
     "wagmi": "^2.5.19"
   },
   "peerDependenciesMeta": {
